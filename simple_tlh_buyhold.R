@@ -2,7 +2,7 @@ library(quantmod)
 
 quantmod::getSymbols("^GSPC", from="1900-01-01")
 
-GSPC_monthly <- to.monthly(GSPC, indexAt="yearmon")
+GSPC_monthly <- to.monthly(GSPC, indexAt="yearmon")["1965::",]
 
 accum <- data.frame()
 nextrw <- 1
@@ -46,3 +46,4 @@ for(i in seq_len(nrow(GSPC_monthly))) {
 }
 
 plot(accum$portval ~ accum$date, type="l")
+plot(accum$yeargl ~ accum$date, type="l")
