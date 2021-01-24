@@ -46,11 +46,13 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
       accum[i,"unrealgl"] <- accum[i, "portval"] - accum[i, "basis"]
       # # offset gain if loss available
       # # I thought this made sense but in reality it does not
-      # # for an isolated portfolio we can never get basis higher than starting portfolio value
-      # # so assuming a time series eventually moves to a cumulative gain then basis will
+      # # for an isolated portfolio we can never get basis higher than starting portfolio value.
+      # # Assuming a time series eventually moves to a cumulative gain then basis will
       # # approach and eventually equal starting portfolio value
-      # # meaning that at point where basis equals starting portfolio value
-      # # there is no difference between the tax-loss-harvested portfolio and the buy-hold
+      # # meaning that at the point where basis equals starting portfolio value
+      # # there is no difference between the tax-loss-harvested portfolio and the buy-hold.
+      # # In this case, we need another application for the harvested gains outside of
+      # # the isolated portfolio to get any value from it.
       # if(accum[i,"unrealgl"] > 0 && lastrw[,"carryforward"] < 0) {
       #   availgl <- (-accum[i,"carryforward"]) / accum[i,"unrealgl"] 
       #   if(availgl > 1) {
