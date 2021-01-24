@@ -5,14 +5,15 @@ library(quantmod)
 harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
   dat_monthly <- to.monthly(dat, indexAt="yearmon")
   nrw = nrow(dat_monthly)
+  # set up empty data.frame based on data which we will populate
   accum <- data.frame(
     date = index(dat_monthly),
     basis = rep(0, nrw),
     gl = rep(0, nrw),
     price = rep(0, nrw),
     portval = rep(0, nrw),
-    quantity = rep(0, nrw),
     unrealgl = rep(0, nrw),
+    carryforward = rep(0, nrw),
     yeargl = rep(0, nrw),
     yearstartprice = rep(0, nrw),
     yearret = rep(0, nrw)
@@ -22,10 +23,9 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
     rw = dat_monthly[i,]
   
     if(i == 1L) { # initialize first trade
-      accum[i,"basis"] <- rw[,6,drop=TRUE]
+      accum[i,"basis"] <- portval
       accum[i,"price"] <- rw[,6,drop=TRUE]
       accum[i,"portval"] <- portval
-      accum[i,"quantity"] <- portval / rw[,6,drop=TRUE]
       accum[i,"yearstartprice"] <- rw[,6,drop=TRUE]
     } else { # evaluate tax loss harvesting opportunity
       lastrw <- accum[i - 1, ]
@@ -33,23 +33,47 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
       accum[i,"gl"] <- 0
       accum[i,"price"] <- rw[,6,drop=TRUE]
       accum[i,"portval"] <- lastrw[,"portval"] * (accum[i,"price"] / lastrw[,"price"])
-      accum[i,"quantity"] <- lastrw[,"quantity"]
       accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
-      accum[i,"yearstartprice"] <- accum[i-1,"yearstartprice"]
+      accum[i,"yearstartprice"] <- lastrw[,"yearstartprice"]
+      accum[i,"carryforward"] <- lastrw[,"carryforward"]
       # harvest if price below threshold
-      if(rw[,6,drop=TRUE] < lastrw$basis * (1 - threshold)) {
-        accum[i,"basis"] <- rw[,6,drop=TRUE]
-        accum[i,"gl"] <- (lastrw[,"quantity"] * rw[,6,drop=TRUE]) - lastrw[,"portval"]
-        accum[i,"quantity"] <- accum[i,"portval"] / rw[,6,drop=TRUE]
+      if(accum[i,"portval"] < lastrw[, "basis"] * (1 - threshold )) {
+        accum[i,"gl"] <- accum[i,"portval"] - accum[i,"basis"]
+        accum[i,"basis"] <- accum[i,"portval"]
         accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+        accum[i,"carryforward"] <- accum[i-1,"carryforward"] + accum[i,"gl"]
       }
-      accum[i,"unrealgl"] <- accum[i, "portval"] - (accum[i, "quantity"] * accum[i, "basis"])
+      accum[i,"unrealgl"] <- accum[i, "portval"] - accum[i, "basis"]
+      # # offset gain if loss available
+      # # I thought this made sense but in reality it does not
+      # # for an isolated portfolio we can never get basis higher than starting portfolio value
+      # # so assuming a time series eventually moves to a cumulative gain then basis will
+      # # approach and eventually equal starting portfolio value
+      # # meaning that at point where basis equals starting portfolio value
+      # # there is no difference between the tax-loss-harvested portfolio and the buy-hold
+      # if(accum[i,"unrealgl"] > 0 && lastrw[,"carryforward"] < 0) {
+      #   availgl <- (-accum[i,"carryforward"]) / accum[i,"unrealgl"] 
+      #   if(availgl > 1) {
+      #     accum[i,"gl"] <- accum[i,"portval"] - accum[i,"basis"]
+      #     accum[i,"basis"] <- accum[i,"portval"]
+      #     accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+      #     accum[i,"unrealgl"] <- accum[i, "portval"] - accum[i,"basis"]
+      #     accum[i,"carryforward"] <- lastrw[,"carryforward"] + accum[i,"gl"]
+      #   } else {
+      #     sellpct <- -accum[i,"carryforward"] / accum[i,"unrealgl"]
+      #     accum[i,"gl"] <- -accum[i,"carryforward"]
+      #     accum[i,"carryforward"] <- 0
+      #     accum[i,"basis"] <- accum[i,"basis"] + accum[i,"gl"]
+      #     accum[i,"unrealgl"] <- accum[i, "portval"] - accum[i,"basis"]
+      #     accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+      #   }
+      # }
       # beginning of year reset yeargl
       if(months(accum[i,"date"]) == "January"){
         accum[i,"yeargl"] <- accum[i,"gl"]
-        accum[i,"yearstartprice"] <- accum[i-1,"price"]
+        accum[i,"yearstartprice"] <- lastrw[,"price"]
       }
-      accum[i-1,"yearret"] <- accum[i-1,"price"] / accum[i-1,"yearstartprice"] - 1
+      accum[i-1,"yearret"] <- lastrw[,"price"] / lastrw[,"yearstartprice"] - 1
     }
   }
   
@@ -72,7 +96,8 @@ evaluate_harvesting <- function(dat = NULL) {
       lapply(dat, function(startyr) {
         c(
           startyr = as.numeric(format(startyr[1,"date"], "%Y")),
-          nharvests = length(which(startyr$gl != 0)),
+          nharvests = length(which(startyr$gl < 0)),
+          noffsets = length(which(startyr$gl > 0)),
           gl_total = sum(startyr$gl)
         )
       })
@@ -86,7 +111,7 @@ evaluate_harvesting <- function(dat = NULL) {
 ### try out our harvesting functions ----
 quantmod::getSymbols("^GSPC", from="1900-01-01")
 
-h <- test_harvest_yearly(GSPC["2010::",])
+h <- test_harvest_yearly(GSPC)
 
 eh <- evaluate_harvesting(h)
 
