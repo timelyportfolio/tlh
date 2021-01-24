@@ -12,7 +12,8 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
     price = rep(0, nrw),
     portval = rep(0, nrw),
     quantity = rep(0, nrw),
-    yeargl = rep(0, nrw)
+    yeargl = rep(0, nrw),
+    yearstartprice = rep(0, nrw)
   )
 
   for(i in seq_len(nrow(dat_monthly))) {
@@ -20,11 +21,10 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
   
     if(i == 1L) { # initialize first trade
       accum[i,"basis"] <- rw[,6,drop=TRUE]
-      accum[i,"gl"] <- 0
       accum[i,"price"] <- rw[,6,drop=TRUE]
       accum[i,"portval"] <- portval
       accum[i,"quantity"] <- portval / rw[,6,drop=TRUE]
-      accum[i,"yeargl"] <- 0
+      accum[i,"yearstartprice"] <- rw[,6,drop=TRUE]
     } else { # evaluate tax loss harvesting opportunity
       lastrw <- accum[i - 1, ]
       accum[i,"basis"] <- lastrw[,"basis"]
@@ -33,6 +33,7 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
       accum[i,"portval"] <- lastrw[,"portval"] * (accum[i,"price"] / lastrw[,"price"])
       accum[i,"quantity"] <- lastrw[,"quantity"]
       accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+      accum[i,"yearstartprice"] <- accum[i-1,"yearstartprice"]
       if(rw[,6,drop=TRUE] < lastrw$basis * (1 - threshold)) {
         accum[i,"basis"] <- rw[,6,drop=TRUE]
         accum[i,"gl"] <- (lastrw[,"quantity"] * rw[,6,drop=TRUE]) - lastrw[,"portval"]
@@ -42,6 +43,7 @@ harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
       # beginning of year reset yeargl
       if(months(accum[i,"date"]) == "January"){
         accum[i,"yeargl"] <- accum[i,"gl"]
+        accum[i,"yearstartprice"] <- accum[i-1,"price"]
       }
     }
   }
