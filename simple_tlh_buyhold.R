@@ -1,49 +1,87 @@
 library(quantmod)
 
-quantmod::getSymbols("^GSPC", from="1900-01-01")
+### harvesting functions ----
+# horribly unoptimized and slow
+harvest <- function(dat = NULL, threshold = 0.1, portval = 100000) {
+  dat_monthly <- to.monthly(dat, indexAt="yearmon")
+  nrw = nrow(dat_monthly)
+  accum <- data.frame(
+    date = index(dat_monthly),
+    basis = rep(0, nrw),
+    gl = rep(0, nrw),
+    price = rep(0, nrw),
+    portval = rep(0, nrw),
+    quantity = rep(0, nrw),
+    yeargl = rep(0, nrw)
+  )
 
-GSPC_monthly <- to.monthly(GSPC, indexAt="yearmon")["1965::",]
-
-accum <- data.frame()
-nextrw <- 1
-threshold <- 0.1
-portval <- 100000
-
-for(i in seq_len(nrow(GSPC_monthly))) {
-  rw = GSPC_monthly[i,]
-
-  if(nrow(accum) == 0L) { # initialize first trade
-    accum[nextrw,"date"] <- as.Date(index(rw))
-    accum[nextrw,"basis"] <- rw[,6,drop=TRUE]
-    accum[nextrw,"gl"] <- NA
-    accum[nextrw,"price"] <- rw[,6,drop=TRUE]
-    accum[nextrw,"portval"] <- portval
-    accum[nextrw,"quantity"] <- portval / rw[,6,drop=TRUE]
-    accum[nextrw,"yeargl"] <- 0
-    nextrw <<- nextrw + 1
-  } else { # evaluate tax loss harvesting opportunity
-    lastrw <- accum[nextrw - 1, ]
-    accum[nextrw,"date"] <- as.Date(index(rw))
-    accum[nextrw,"basis"] <- lastrw[,"basis"]
-    accum[nextrw,"gl"] <- 0
-    accum[nextrw,"price"] <- rw[,6,drop=TRUE]
-    accum[nextrw,"portval"] <- lastrw[,"portval"] * (accum[nextrw,"price"] / lastrw[,"price"])
-    accum[nextrw,"quantity"] <- lastrw[,"quantity"]
-    accum[nextrw,"yeargl"] <- lastrw[,"yeargl"] + accum[nextrw,"gl"]
-    if(rw[,6,drop=TRUE] < lastrw$basis * (1 - threshold)) {
-      accum[nextrw,"date"] <- as.Date(index(rw))
-      accum[nextrw,"basis"] <- rw[,6,drop=TRUE]
-      accum[nextrw,"gl"] <- (lastrw[,"quantity"] * rw[,6,drop=TRUE]) - lastrw[,"portval"]
-      accum[nextrw,"quantity"] <- accum[nextrw,"portval"] / rw[,6,drop=TRUE]
-      accum[nextrw,"yeargl"] <- lastrw[,"yeargl"] + accum[nextrw,"gl"]
+  for(i in seq_len(nrow(dat_monthly))) {
+    rw = dat_monthly[i,]
+  
+    if(i == 1L) { # initialize first trade
+      accum[i,"basis"] <- rw[,6,drop=TRUE]
+      accum[i,"gl"] <- 0
+      accum[i,"price"] <- rw[,6,drop=TRUE]
+      accum[i,"portval"] <- portval
+      accum[i,"quantity"] <- portval / rw[,6,drop=TRUE]
+      accum[i,"yeargl"] <- 0
+    } else { # evaluate tax loss harvesting opportunity
+      lastrw <- accum[i - 1, ]
+      accum[i,"basis"] <- lastrw[,"basis"]
+      accum[i,"gl"] <- 0
+      accum[i,"price"] <- rw[,6,drop=TRUE]
+      accum[i,"portval"] <- lastrw[,"portval"] * (accum[i,"price"] / lastrw[,"price"])
+      accum[i,"quantity"] <- lastrw[,"quantity"]
+      accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+      if(rw[,6,drop=TRUE] < lastrw$basis * (1 - threshold)) {
+        accum[i,"basis"] <- rw[,6,drop=TRUE]
+        accum[i,"gl"] <- (lastrw[,"quantity"] * rw[,6,drop=TRUE]) - lastrw[,"portval"]
+        accum[i,"quantity"] <- accum[i,"portval"] / rw[,6,drop=TRUE]
+        accum[i,"yeargl"] <- lastrw[,"yeargl"] + accum[i,"gl"]
+      }
+      # beginning of year reset yeargl
+      if(months(accum[i,"date"]) == "January"){
+        accum[i,"yeargl"] <- accum[i,"gl"]
+      }
     }
-    # beginning of year reset yeargl
-    if(months(accum[nextrw,"date"]) == "January"){
-      accum[nextrw,"yeargl"] <- accum[nextrw,"gl"]
-    }
-    nextrw <<- nextrw + 1
   }
+  
+  accum
 }
 
-plot(accum$portval ~ accum$date, type="l")
-plot(accum$yeargl ~ accum$date, type="l")
+
+test_harvest_yearly <- function(dat = NULL, ...) {
+  yrs <- unique(format(index(dat),"%Y"))
+  structure(lapply(yrs, function(yr) {
+    dat_yr <- dat[paste0(yr,"::"),]
+    harvest(dat = dat_yr, ...)
+  }), names = yrs)
+}
+
+evaluate_harvesting <- function(dat = NULL) {
+  as.data.frame(
+    do.call(
+      rbind,
+      lapply(dat, function(startyr) {
+        c(
+          startyr = as.numeric(format(startyr[1,"date"], "%Y")),
+          nharvests = length(which(startyr$gl != 0)),
+          gl_total = sum(startyr$gl)
+        )
+      })
+    )
+  )
+}
+
+
+
+
+### try out our harvesting functions ----
+quantmod::getSymbols("^GSPC", from="1900-01-01")
+
+h <- test_harvest_yearly(GSPC)
+
+eh <- evaluate_harvesting(h)
+
+barplot(eh$gl_total~eh$startyr)
+barplot(eh$nharvests~eh$startyr)
