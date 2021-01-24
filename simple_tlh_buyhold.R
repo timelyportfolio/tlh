@@ -81,7 +81,7 @@ evaluate_harvesting <- function(dat = NULL) {
 ### try out our harvesting functions ----
 quantmod::getSymbols("^GSPC", from="1900-01-01")
 
-h <- test_harvest_yearly(GSPC)
+h <- test_harvest_yearly(GSPC["2000::",])
 
 eh <- evaluate_harvesting(h)
 
