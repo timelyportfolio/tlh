@@ -7,6 +7,7 @@
 
 
 library(quantmod)
+library(PerformanceAnalytics)
 
 getSymbols("^GSPC", from = "1900-01-01")
 
@@ -149,7 +150,7 @@ for(i in seq_len(nrow(monthly))) {
 }
 
 # see total carryforward divided by system portfolio value
-plot((monthly$carryforward_short + monthly$carryforward_long)/monthly$system, type="l")
+plot((monthly$carryforward_short + monthly$carryforward_long)/monthly$system ~ monthly$date, type="l")
 
 # convert portfolio values to xts
 val_xts <- as.xts(monthly[,c("buyhold","system","system_posttax")], order.by = as.Date(monthly$date))
@@ -157,5 +158,16 @@ chartSeries(val_xts$buyhold, yrange = range(val_xts), log=TRUE, name="Cumulative
 addTA(val_xts$system, on=1)
 addTA(val_xts$system_posttax, on=1)
 
+# calculate annual return
+perf_xts <- do.call(
+  merge,
+  lapply(val_xts,function(x) {
+    y <- annualReturn(x)
+    colnames(y) <- colnames(x)
+    y
+  })
+)
+table.TrailingPeriods(perf_xts)
+
 # plot cumulative taxes
-plot(cumsum(monthly$tax), type="l")
+plot(cumsum(monthly$tax) ~ monthly$date, type="l")
