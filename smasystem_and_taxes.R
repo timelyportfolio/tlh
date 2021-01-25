@@ -1,3 +1,11 @@
+# see if we can evaluate after-tax performance of a simple moving average system
+# improvement ideas:
+#    1) functionalize
+#    2) optimize
+#    3) separate out system portfolio accounting and after-tax evaluation routine
+#    4) test code and test parameters
+
+
 library(quantmod)
 
 getSymbols("^GSPC", from = "1900-01-01")
@@ -141,13 +149,13 @@ for(i in seq_len(nrow(monthly))) {
 }
 
 # see total carryforward divided by system portfolio value
-plot((monthly$carryforward_short + monthly$carryforward_long)/monthly$system)
+plot((monthly$carryforward_short + monthly$carryforward_long)/monthly$system, type="l")
 
 # convert portfolio values to xts
 val_xts <- as.xts(monthly[,c("buyhold","system","system_posttax")], order.by = as.Date(monthly$date))
-chartSeries(val_xts$buyhold, yrange = range(val_xts))
+chartSeries(val_xts$buyhold, yrange = range(val_xts), log=TRUE, name="Cumulative Value")
 addTA(val_xts$system, on=1)
 addTA(val_xts$system_posttax, on=1)
 
 # plot cumulative taxes
-plot(cumsum(monthly$tax))
+plot(cumsum(monthly$tax), type="l")
