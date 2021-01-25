@@ -119,13 +119,14 @@ for(i in seq_len(nrow(monthly))) {
         carryforward_short <- yeargl_long_o + carryforward_short
         if(carryforward_short > 0) {carryforward_short <- 0}
       }
-      # if carryforward long still available then offset short losses
-      if(carryforward_long < 0 && yeargl_short > 0) {
-        yeargl_short_o <- yeargl_short
-        yeargl_short <- yeargl_short + carryforward_long
-        carryforward_long <- yeargl_short_o + carryforward_long
-        if(carryforward_long > 0) {carryforward_long <- 0}
-      }
+      # based on my understanding long term carryforward cannot offset short gains
+      # # if carryforward long still available then offset short losses
+      # if(carryforward_long < 0 && yeargl_short > 0) {
+      #   yeargl_short_o <- yeargl_short
+      #   yeargl_short <- yeargl_short + carryforward_long
+      #   carryforward_long <- yeargl_short_o + carryforward_long
+      #   if(carryforward_long > 0) {carryforward_long <- 0}
+      # }
       # now that short and long carryforwards fully applied calculate tax
       tax <- 0
       if(yeargl_short > 0) {
